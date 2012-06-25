@@ -7,10 +7,10 @@ require 'iron_cache'
 
 class WordCount
 
-  def map(file_path)
+  def map(s)
     @word_counts = {}
-    file = open(file_path, "r")
-    file.each_line do |line|
+
+    s.each_line do |line|
       words = line.split
       words.each do |word|
         word = word.gsub(/[,()'"]/,'')
@@ -52,7 +52,9 @@ end
 input_dir = "input"
 
 chunker = Chunker.new
-files = chunker.iron_chunker "http://norvig.com/big.txt", "big", 64000, input_dir
+files = chunker.file_chunker "http://norvig.com/big.txt", "big", 1024*1024, input_dir
+cache = @ic.cache("big.txt")
+#files = chunker.iron_chunker "http://norvig.com/big.txt", cache, 64000
 
 # todo: Store files somewhere online - IronCache would be nice, could try tons of small chunks.
 # todo: write files to a separate entry to pull up list for mapper
@@ -63,7 +65,8 @@ wc = WordCount.new
 word_counts = []
 files.each_with_index do |f, i|
   # todo: this should be a worker, keep a list of the worker id's to get status' and restart any that errored out
-  word_counts << wc.map("#{input_dir}/#{f}")
+  s = IO.read("#{input_dir}/#{f}")
+  word_counts << wc.map(s)
   # todo: put results in cache for each map job
   # todo: put count for a word in a message queue?  Then reducer looks at queues and pulls numbers off the queue
   # todo: OR increment a cache entry?
@@ -72,10 +75,10 @@ end
 # todo: put list of word count locations in cache entry
 
 # todo: get list of word count locations from cache
-words.each_with_index do |wc, i|
-
-  wc.reduce
-end
+#words.each_with_index do |wc, i|
+#
+#  wc.reduce
+#end
 
 # should also do LineIndexer
 
