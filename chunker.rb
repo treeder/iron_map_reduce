@@ -11,11 +11,11 @@ class Chunker
   end
 
 
-  def iron_chunker(f_in, cache, chunksize = 64000)
+  def iron_chunker(f_in, out_pref, cache, options={})
+    chunksize = options[:chunksize] || 60000
     outfilenum = 0
     # Can also load local file with same code
     files_written = []
-    FileUtils.mkdir_p(output_dir)
     open(f_in, "r") do |fh_in|
       until fh_in.eof?
         output_f_name = "#{out_pref}_#{outfilenum}.txt"
@@ -26,7 +26,8 @@ class Chunker
           line = fh_in.readline
           value << line
         end
-        cache.put("#{output_f_name}", value)
+        puts "Putting #{output_f_name} to ironcache"
+        cache.put("#{output_f_name}", value, options)
         outfilenum += 1
       end
     end

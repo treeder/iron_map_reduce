@@ -13,7 +13,7 @@ class WordCount
     s.each_line do |line|
       words = line.split
       words.each do |word|
-        word = word.gsub(/[,()'"]/,'')
+        word = word.gsub(/[,()'"]/, '')
         if @word_counts[word]
           @word_counts[word] += 1
         else
@@ -24,7 +24,7 @@ class WordCount
 
     puts "Words count: "
     num_less_than_1000 = 0
-    @word_counts.sort {|a,b| a[1] <=> b[1]}.each do |key,value|
+    @word_counts.sort { |a, b| a[1] <=> b[1] }.each do |key, value|
       if value < 1000
         num_less_than_1000 += 1
       else
@@ -47,26 +47,39 @@ class WordCount
 
 end
 
+
+use_files = true
 @ic = IronCache::Client.new
 @mq = IronMQ::Client.new
 input_dir = "input"
+cache = @ic.cache("big.txt")
 
 chunker = Chunker.new
-files = chunker.file_chunker "http://norvig.com/big.txt", "big", 1024*1024, input_dir
-cache = @ic.cache("big.txt")
-#files = chunker.iron_chunker "http://norvig.com/big.txt", cache, 64000
+if use_files
+  files = chunker.file_chunker "http://norvig.com/big.txt", "big", 1024*1024, input_dir
+else
+  files = chunker.iron_chunker "http://norvig.com/big.txt", "big", cache, :chunksize=>60000, :expires_in=>60*10
+end
 
-# todo: Store files somewhere online - IronCache would be nice, could try tons of small chunks.
 # todo: write files to a separate entry to pull up list for mapper
 
 # todo: get file list from remote location. Cache or maybe MQ?
 
 wc = WordCount.new
-word_counts = []
 files.each_with_index do |f, i|
   # todo: this should be a worker, keep a list of the worker id's to get status' and restart any that errored out
-  s = IO.read("#{input_dir}/#{f}")
-  word_counts << wc.map(s)
+  if use_files
+    s = IO.read("#{input_dir}/#{f}")
+  else
+    s = cache.get(f).value
+  end
+  word_counts = wc.map(s)
+  word_counts.each_pair do |word, count|
+    cache_key = "word_count_#{word}"
+    cache.increment(cache_key, count, :expires_in=>60*10)
+    this should perhaps be separate queue for each word?
+    @mq.queue("words").post({word: word, cache_key: cache_key, count: count})
+  end
   # todo: put results in cache for each map job
   # todo: put count for a word in a message queue?  Then reducer looks at queues and pulls numbers off the queue
   # todo: OR increment a cache entry?
@@ -75,6 +88,8 @@ end
 # todo: put list of word count locations in cache entry
 
 # todo: get list of word count locations from cache
+
+
 #words.each_with_index do |wc, i|
 #
 #  wc.reduce
@@ -89,7 +104,7 @@ class LineIndexer
     file.each_line do |line|
       words = line.split
       words.each do |word|
-        word = word.gsub(/[,()'"]/,'')
+        word = word.gsub(/[,()'"]/, '')
         if @word_counts[word]
           @word_counts[word] << file_path
         else
