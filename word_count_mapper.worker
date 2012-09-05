@@ -1,0 +1,5 @@
+runtime 'ruby'
+exec 'word_count_mapper.rb'
+gem 'iron_worker_ng'
+gem 'iron_mq'
+gem 'iron_cache'
